@@ -1,19 +1,24 @@
 {
     "name": "erebox/text-adventure-engine",
     "description": "Text Adventure Engine based on json formatted file.",
+    "keywords": [
+        "TextAdventure",
+        "Engine"
+    ],
+    "homepage": "http://github.com/mpociot/pipeline",
+    "license": "MIT",
     "authors": [
         {
             "name": "Erebox",
             "email": "erebox@gmail.com"
         }
     ],
-	"minimum-stability": "dev",	
     "require": {
         "php": ">=7.0"
     },
     "autoload": {
-        "psr-0": {
-            "TextAdventure": "src/"
+        "psr-4": {
+            "Erebox\\TextAdventureEngine\\": "src/"
         }
     }
 }

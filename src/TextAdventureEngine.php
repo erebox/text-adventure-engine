@@ -1,8 +1,8 @@
 <?php
 
-namespace TextAdventure;
+namespace Erebox\TextAdventureEngine;
 
-class Engine
+class TextAdventureEngine
 {
 
     protected $resp_message = [];
