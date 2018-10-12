@@ -1,0 +1,19 @@
+{
+    "name": "erebox/text-adventure-engine",
+    "description": "Text Adventure Engine based on json formatted file.",
+    "authors": [
+        {
+            "name": "Erebox",
+            "email": "erebox@gmail.com"
+        }
+    ],
+	"minimum-stability": "dev",	
+    "require": {
+        "php": ">=7.0"
+    },
+    "autoload": {
+        "psr-0": {
+            "TextAdventure": "src/"
+        }
+    }
+}
