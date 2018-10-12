@@ -65,7 +65,9 @@ class TextAdventureEngine
     protected $C_EAT    = "eat";
     protected $C_SPEA   = "speak";
     protected $C_STAT   = "status";
-    
+
+    protected $V_VERS   = "1.0.0";
+
     private $debug = true;
     
     public function __construct($jsongame = null)
@@ -113,6 +115,11 @@ class TextAdventureEngine
     public function debug() 
     {
         return $this->game;
+    }
+
+    public function version() 
+    {
+        return $this->V_VERS;
     }
 
 
