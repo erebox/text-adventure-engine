@@ -2,7 +2,7 @@
 
 namespace Erebox\TextAdventureEngine;
 
-class TextAdventureEngine
+class Engine
 {
 
     protected $resp_message = [];
@@ -67,8 +67,6 @@ class TextAdventureEngine
     protected $C_STAT   = "status";
 
     protected $V_VERS   = "1.0.0";
-
-    private $debug = true;
     
     public function __construct($jsongame = null)
     {
@@ -91,7 +89,7 @@ class TextAdventureEngine
     public function get() 
     {
         return [
-            "msg" => $this->resp_message, 
+            "message" => $this->resp_message, 
             "status" => $this->resp_status
         ];
     }
@@ -108,12 +106,9 @@ class TextAdventureEngine
         return ($this->end == 1);
     }
 
-    public function restart() {
-        return ($this->end == 1);
-    }
-
     public function debug() 
     {
+        //TODO
         return $this->game;
     }
 

@@ -1,24 +1,21 @@
 {
     "name": "erebox/text-adventure-engine",
-    "description": "Text Adventure Engine based on json formatted file.",
-    "keywords": [
-        "TextAdventure",
-        "Engine"
-    ],
-    "homepage": "https://github.com/erebox/text-adventure-engine",
+    "type": "library",
+    "description": "A text adventure engine based on a json formatted file.",
     "license": "MIT",
+    "keywords": ["TextAdventure", "Engine"],
+    "homepage": "https://github.com/erebox/text-adventure-engine",
     "authors": [
         {
             "name": "Erebox",
-            "email": "erebox@gmail.com"
+            "email": "erebox@gmail.com",
+            "homepage": "https://github.com/erebox"
         }
     ],
     "require": {
-        "php": ">=7.0"
+        "php": "^7"
     },
     "autoload": {
-        "psr-4": {
-            "Erebox\\TextAdventureEngine\\": "src/"
-        }
+        "psr-4": { "Erebox\\TextAdventureEngine\\": "src/" }
     }
 }
