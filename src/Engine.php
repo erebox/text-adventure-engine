@@ -14,11 +14,8 @@ class Engine
     protected $inventory_max = 10;
 
     protected $inventory = [];
-    protected $game = [];
+    protected $game = null;
     protected $var = [];
-
-    protected $game_init = [];
-    
 
     protected $parser_igno = [];
     protected $parser_verb = [];
@@ -32,40 +29,39 @@ class Engine
     protected $trigger_item = "";
 
     //Tag
-    protected $T_ROOM   = "room";
-    protected $T_ITEM   = "item";
+    protected $T_ROOM   = 'room'; //description "" direction {}
+    protected $T_ITEM   = 'item'; //description "" position "" action {} capacity bool
+    protected $T_TRIG   = "trigger";
+    protected $T_CONF   = "config";
+    protected $T_ACTI   = "action";
     protected $T_DESC   = "description";
-    protected $T_DETA   = "detail";
     protected $T_EXIT   = "direction";
     protected $T_POSI   = "position";
-    protected $T_OPEN   = "open";
+    protected $T_OPEN   = "openable";    //capacity
     protected $T_PICK   = "pickable";
     protected $T_REMO   = "removable";
     protected $T_EAT    = "eatable";
-    protected $T_ACTI   = "action";
-    protected $T_TYPE   = "type";
-    protected $T_VALU   = "value";
-    protected $T_TRIG   = "trigger";
     //Flag
-    protected $F_INVE   = "@";
-    protected $F_REMO   = "#";
+    protected $F_LOCA   = "@";
+    protected $F_INVE   = "#";
+    protected $F_REMO   = "-";
+    protected $F_EAT    = "^";
+    protected $F_ACTI   = ":";
     //Command
     protected $C_OPEN   = "open";
     protected $C_CLOS   = "close";
     protected $C_PICK   = "pickup";
     protected $C_LEAV   = "leave";
+    protected $C_REMO   = "remove";
+    protected $C_EAT    = "eat"; //ok
+    protected $C_USE    = "use"; //ok
+    protected $C_SPEA   = "speak";
     protected $C_INVE   = "inventory";
     protected $C_LOOK   = "look";
     protected $C_GOTO   = "goto";
-    protected $C_REMO   = "remove";
     protected $C_EXIT   = "exit";
-    protected $C_LOAD   = "load";
-    protected $C_SAVE   = "save";
     protected $C_HELP   = "help";
-    protected $C_EAT    = "eat";
-    protected $C_SPEA   = "speak";
-    protected $C_STAT   = "status";
-
+    //Version
     protected $V_VERS   = "1.0.0";
     
     public function __construct($jsongame = null)
@@ -77,9 +73,8 @@ class Engine
     {
         if ($jsongame) {
             $this->game = json_decode($jsongame, true);
-            $this->game_init = $jsongame;
         }
-        if (count($this->game)>0) {
+        if ($this->game && count($this->game)>0) {
             $this->setup();
             $this->intro();
             $this->go();
@@ -98,18 +93,13 @@ class Engine
     {
         $this->resp_message = [];
         $this->resp_status = [];
-        $this->parseSentence($sentence);
+        if ($this->game && count($this->game)>0) {
+            $this->parseSentence($sentence);
+        }
     }
-
 
     public function ended() {
         return ($this->end == 1);
-    }
-
-    public function debug() 
-    {
-        //TODO
-        return $this->game;
     }
 
     public function version() 
@@ -117,28 +107,26 @@ class Engine
         return $this->V_VERS;
     }
 
-
     /**
      *  Private
      */
     
     private function setup()
     {
-        $this->player_pos = $this->game["config"]["init_room"];
-        if (isset($this->game["config"]["inventory_max"])) {
-            $this->inventory_max = $this->game["config"]["inventory_max"];            
+        $this->player_pos = $this->game[$this->T_CONF]["init_room"];
+        if (isset($this->game[$this->T_CONF]["inventory_max"])) {
+            $this->inventory_max = $this->game[$this->T_CONF]["inventory_max"];            
         }
         
-        $this->parser_igno = array_flip($this->game["config"]["ignore"]);
-        $this->parser_dire = $this->getTokenArray($this->game["config"][$this->T_EXIT]);
+        $this->parser_igno = array_flip($this->game[$this->T_CONF]["ignore"]);
+        $this->parser_dire = $this->getTokenArray($this->game[$this->T_CONF][$this->T_EXIT]);
         
         $this->parser_verb = $this->getOnlyAlias($this->game[$this->T_ACTI]);
         $this->parser_item = $this->getTokenAlias($this->game[$this->T_ITEM]);
 
         if (isset($this->game["config"]["init_var"])) {
             $var2set = $this->game["config"]["init_var"];
-            foreach ( $var2set as $curr_var2set) {
-                list($curr_var,$curr_val) = explode(":", $curr_var2set);
+            foreach ( $var2set as $curr_var => $curr_val) {
                 $this->var[$curr_var] = $curr_val;
             }
         }
@@ -146,7 +134,7 @@ class Engine
 
     private function intro()
     {
-        $this->arrStr2respMsg($this->game["config"]["intro"]);
+        $this->arrStr2respMsg($this->game[$this->T_CONF]["intro"]);
     }
 
     private function go()
@@ -221,51 +209,47 @@ class Engine
             $this->curr_item = $item;
             $this->trigger_action = $this->curr_verb;
             $this->trigger_item = $this->curr_item;
-            //$this->Log("".$this->curr_verb." - ".$this->curr_item);
             
             switch ($this->curr_verb) {
-                case $this->C_OPEN:
-                    $this->cmdOpen();
+                case $this->C_OPEN: //ok
+                    $this->cmdOpen($item);
                     break;
-                case $this->C_CLOS:
-                    $this->cmdClose();
+                case $this->C_CLOS: //ok
+                    $this->cmdClose($item);
                     break;
-                case $this->C_PICK:
-                    $this->cmdPickup();
+                case $this->C_PICK: //ok
+                    $this->cmdPickup($item);
                     break;
-                case $this->C_LEAV:
-                    $this->cmdLeave();
+                case $this->C_LEAV: //ok
+                    $this->cmdLeave($item);
                     break;
-                case $this->C_INVE:
+                case $this->C_EAT: //ok
+                    $this->cmdEat($item);
+                    break;
+                case $this->C_REMO: //ok
+                    $this->cmdRemove($item);
+                    break;
+                case $this->C_USE: //ok
+                    $this->cmdUse($item);
+                    break;
+                case $this->C_SPEA: //ok
+                    $this->cmdSpeak($item);
+                    break;
+                case $this->C_INVE: //ok
                     $this->cmdInventory();
                     break;
-                case $this->C_LOOK:
-                    $this->cmdLook();
+                case $this->C_LOOK: //ok
+                    $this->cmdLook($item);
                     break;
                 case $this->C_GOTO:
-                    $this->cmdGoto();
+                    $this->cmdGoto($item);
                     break;
-                case $this->C_STAT:
-                    $this->cmdStatus();
-                    break;
-                case $this->C_EAT:
-                    $this->cmdEat();
-                    break;
-                case $this->C_SPEA:
-                    $this->cmdSpeak();
-                    break;
-                case $this->C_REMO:
-                    $this->cmdRemove();
-                    break;
-                case $this->C_EXIT:
-                    $this->cmdExit();
-                    break;
-                case $this->C_HELP:
+
+                case $this->C_HELP: //ok
                     $this->cmdHelp();
                     break;
-                case $this->C_LOAD:
-                case $this->C_SAVE:
-                    $this->cmdDefault();
+                case $this->C_EXIT: //ok
+                    $this->cmdExit();
                     break;
                 default:
                     return $this->cmdDefault();
@@ -274,16 +258,13 @@ class Engine
         if (isset($this->parser_dire[$verb])) {
             $this->curr_item = $verb;
             $this->curr_verb = $this->C_GOTO;
-            $this->cmdGoto();
+            $this->cmdGoto($verb);
         }
     }
 
-    private function cmdDefault() {
-        $this->resp_message[] = $this->txtAction("*", "wip");
-    }
 
     private function cmdHelp() {
-        $this->arrStr2respMsg($this->game["config"]["help"]);
+        $this->arrStr2respMsg($this->game[$this->T_CONF]["help"]);
         $this->trigger_action = "";
         $this->trigger_item = "";
     }
@@ -292,7 +273,11 @@ class Engine
         $this->resp_message[] = $this->txtAction($this->curr_verb, "done");
         $this->end = 1;
     }
-        
+
+    private function cmdDefault() {
+        $this->resp_message[] = $this->txtAction("*", "wip");
+    }
+
     private function canOpen($item) {
         if (
             isset($this->game[$this->T_ITEM][$item]) && (
@@ -315,24 +300,23 @@ class Engine
         }
     }
 
-    private function cmdOpen() {
-        $verb = $this->curr_verb;
-        $item = $this->curr_item;
+    private function cmdOpen($item) {
         $can = $this->canOpen($item);
         if ($can == "ok") {
-            if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$verb])) {
-                // ci sono condizioni eventi sull'azione
-                $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$verb];
-                $canDo = $this->callCondEvent($list_condiz);
+            if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_OPEN])) {
+                $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_OPEN];
+                $canDo = $this->callConditionOnEventAction($list_condiz);
                 if (!$canDo) {
-                    $this->resp_message[] = $this->txtAction($verb, "notable");
+                    $this->resp_message[] = $this->txtAction($this->C_OPEN, "notable");
+                } else {
+                    $this->game[$this->T_ITEM][$item][$this->T_OPEN] = true;
                 }
             } else {
                 $this->game[$this->T_ITEM][$item][$this->T_OPEN] = true;
-                $this->resp_message[] = $this->txtAction($verb, "done");
+                $this->resp_message[] = $this->txtAction($this->C_OPEN, "done");
             }    
         } else {
-            $this->resp_message[] = $this->txtAction($verb, $can);
+            $this->resp_message[] = $this->txtAction($this->C_OPEN, $can);
         }
     }
 
@@ -358,35 +342,29 @@ class Engine
         }
     }
 
-    private function cmdClose() {
-        $verb = $this->curr_verb;
-        $item = $this->curr_item;
+    private function cmdClose($item) {
         $can = $this->canClose($item);
         if ($can == "ok") {
-            if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$verb])) {
-                // ci sono condizioni eventi sull'azione
-                $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$verb];
-                $canDo = $this->callCondEvent($list_condiz);
+            if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_CLOS])) {
+                $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_CLOS];
+                $canDo = $this->callConditionOnEventAction($list_condiz);
                 if (!$canDo) {
-                    $this->resp_message[] = $this->txtAction($verb, "notable");
+                    $this->resp_message[] = $this->txtAction($this->C_CLOS, "notable");
+                } else {
+                    $this->game[$this->T_ITEM][$item][$this->T_OPEN] = false;
                 }
             } else {
                 $this->game[$this->T_ITEM][$item][$this->T_OPEN] = false;
-                $this->resp_message[] = $this->txtAction($verb, "done");
+                $this->resp_message[] = $this->txtAction($this->C_CLOS, "done");
             }    
         } else {
-            $this->resp_message[] = $this->txtAction($verb, $can);
+            $this->resp_message[] = $this->txtAction($this->C_CLOS, $can);
         }
     }
 
     private function canPick($item) {
-        if (
-            isset($this->game[$this->T_ITEM][$item]) &&
-            $this->game[$this->T_ITEM][$item][$this->T_POSI] == $this->player_pos
-        ) {
-            if (isset($this->game[$this->T_ITEM][$item][$this->T_PICK]) &&
-                $this->game[$this->T_ITEM][$item][$this->T_PICK]
-            ) {
+        if ( isset($this->game[$this->T_ITEM][$item]) && $this->game[$this->T_ITEM][$item][$this->T_POSI] == $this->player_pos ) {
+            if (isset($this->game[$this->T_ITEM][$item][$this->T_PICK])) {
                 $num_obj_inv = $this->countInventory();
                 if ($num_obj_inv >= $this->inventory_max) {
                     return "fullinventory";
@@ -401,67 +379,55 @@ class Engine
         }
     }
 
-    private function cmdPickup() {
-        $verb = $this->curr_verb;
-        $item = $this->curr_item;
+    private function cmdPickup($item) {
         $can = $this->canPick($item);
         if ($can == "ok") {
-            if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$verb])) {
-                // ci sono condizioni eventi sull'azione
-                $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$verb];
-                $canDo = $this->callCondEvent($list_condiz);
+            if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_PICK])) {
+                $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_PICK];
+                $canDo = $this->callConditionOnEventAction($list_condiz);
                 if (!$canDo) {
-                    $this->resp_message[] = $this->txtAction($verb, "notable");
+                    $this->resp_message[] = $this->txtAction($this->C_PICK, "notable");
+                } else {
+                    $this->game[$this->T_ITEM][$item][$this->T_POSI] = $this->F_INVE;
                 }
             } else {
                 $this->game[$this->T_ITEM][$item][$this->T_POSI] = $this->F_INVE;
-                $this->resp_message[] = $this->txtAction($verb, "done");
+                $this->resp_message[] = $this->txtAction($this->C_PICK, "done");
             }
         } else {
-            $this->resp_message[] = $this->txtAction($verb, $can);
+            $this->resp_message[] = $this->txtAction($this->C_PICK, $can);
         }
     }
 
     private function canLeave($item) {
-        if (
-            isset($this->game[$this->T_ITEM][$item]) &&
-            $this->game[$this->T_ITEM][$item][$this->T_POSI] == $this->F_INVE
-        ) {
-            return "ok";
+        if ( isset($this->game[$this->T_ITEM][$item]) && $this->game[$this->T_ITEM][$item][$this->T_POSI] == $this->F_INVE ) { 
+            if ( isset($this->game[$this->T_ITEM][$item][$this->T_PICK]) ) {
+                return "ok";
+            } else {
+                return "notable";
+            }
         } else {
-            return "notseen";            
+            return "notseen";
         }
     }
 
-    private function cmdLeave() {
-        $verb = $this->curr_verb;
-        $item = $this->curr_item;
+    private function cmdLeave($item) {
         $can = $this->canLeave($item);
         if ($can == "ok") {
-            if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$verb])) {
-                // ci sono condizioni eventi sull'azione
-                $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$verb];
-                $canDo = $this->callCondEvent($list_condiz);
+            if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_LEAV])) {
+                $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_LEAV];
+                $canDo = $this->callConditionOnEventAction($list_condiz);
                 if (!$canDo) {
-                    $this->resp_message[] = $this->txtAction($verb, "notable");
+                    $this->resp_message[] = $this->txtAction($this->C_LEAV, "notable");
+                } else {
+                    $this->game[$this->T_ITEM][$item][$this->T_POSI] = $this->player_pos;
                 }
             } else {
                 $this->game[$this->T_ITEM][$item][$this->T_POSI] = $this->player_pos;
-                $this->resp_message[] = $this->txtAction($verb, "done");
+                $this->resp_message[] = $this->txtAction($this->C_LEAV, "done");
             }    
         } else {
-            $this->resp_message[] = $this->txtAction($verb, $can);
-        }
-    }
-
-    private function cmdSpeak() {
-        $verb = $this->curr_verb;
-        $item = $this->curr_item;
-        if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$verb])) {
-            $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$verb];
-            $canDo = $this->callCondEvent($list_condiz);
-        } else {
-            $this->resp_message[] = $this->txtAction($verb, "none");            
+            $this->resp_message[] = $this->txtAction($this->C_LEAV, $can);
         }
     }
 
@@ -470,9 +436,7 @@ class Engine
             $this->game[$this->T_ITEM][$item][$this->T_POSI] == $this->player_pos ||
             $this->game[$this->T_ITEM][$item][$this->T_POSI] == $this->F_INVE
         ) {
-            if (isset($this->game[$this->T_ITEM][$item][$this->T_REMO]) &&
-                $this->game[$this->T_ITEM][$item][$this->T_REMO]
-            ) {
+            if ( isset($this->game[$this->T_ITEM][$item][$this->T_REMO]) ) {
                 return "ok";
             } else {
                 return "notable";
@@ -482,24 +446,23 @@ class Engine
         }
     }
 
-    private function cmdRemove() {
-        $verb = $this->curr_verb;
-        $item = $this->curr_item;
+    private function cmdRemove($item) {
         $can = $this->canRemove($item);
         if ($can == "ok") {
-            if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$verb])) {
-                // ci sono condizioni eventi sull'azione
-                $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$verb];
-                $canDo = $this->callCondEvent($list_condiz);
+            if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_REMO])) {
+                $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_REMO];
+                $canDo = $this->callConditionOnEventAction($list_condiz);
                 if (!$canDo) {
-                    $this->resp_message[] = $this->txtAction($verb, "notable");
+                    $this->resp_message[] = $this->txtAction($this->C_REMO, "notable");
+                } else {
+                    $this->game[$this->T_ITEM][$item][$this->T_POSI] = $this->F_REMO;
                 }
             } else {
                 $this->game[$this->T_ITEM][$item][$this->T_POSI] = $this->F_REMO;
-                $this->resp_message[] = $this->txtAction($verb, "done");
+                $this->resp_message[] = $this->txtAction($this->C_REMO, "done");
             }    
         } else {
-            $this->resp_message[] = $this->txtAction($verb, $can);
+            $this->resp_message[] = $this->txtAction($this->C_REMO, $can);
         }
     }
 
@@ -508,9 +471,7 @@ class Engine
             $this->game[$this->T_ITEM][$item][$this->T_POSI] == $this->player_pos ||
             $this->game[$this->T_ITEM][$item][$this->T_POSI] == $this->F_INVE
         ) {
-            if (isset($this->game[$this->T_ITEM][$item][$this->T_EAT]) &&
-                $this->game[$this->T_ITEM][$item][$this->T_EAT]
-            ) {
+            if ( isset($this->game[$this->T_ITEM][$item][$this->T_EAT]) ) {
                 return "ok";
             } else {
                 return "notable";
@@ -520,27 +481,53 @@ class Engine
         }
     }
 
-    private function cmdEat() {
-        $verb = $this->curr_verb;
-        $item = $this->curr_item;
+    private function cmdEat($item) {
         $can = $this->canEat($item);
         if ($can == "ok") {
-            if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$verb])) {
-                // ci sono condizioni eventi sull'azione
-                $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$verb];
-                $canDo = $this->callCondEvent($list_condiz);
+            if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_EAT])) {
+                $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_EAT];
+                $canDo = $this->callConditionOnEventAction($list_condiz);
                 if (!$canDo) {
-                    $this->resp_message[] = $this->txtAction($verb, "notable");
+                    $this->resp_message[] = $this->txtAction($this->C_EAT, "notable");
+                } else {
+                    $this->game[$this->T_ITEM][$item][$this->T_POSI] = $this->F_EAT;
                 }
             } else {
-                $this->game[$this->T_ITEM][$item][$this->T_POSI] = $this->T_EAT;
-                $this->resp_message[] = $this->txtAction($verb, "done");
+                $this->game[$this->T_ITEM][$item][$this->T_POSI] = $this->F_EAT;
+                $this->resp_message[] = $this->txtAction($this->C_EAT, "done");
             }    
         } else {
-            $this->resp_message[] = $this->txtAction($verb, $can);
+            $this->resp_message[] = $this->txtAction($this->C_EAT, $can);
         }
     }
 
+    private function cmdUse($item) {
+        if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_USE])) {
+            $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_USE];
+            $canDo = $this->callConditionOnEventAction($list_condiz);
+            if (!$canDo) {
+                $this->resp_message[] = $this->txtAction($this->C_USE, "notable");
+            } else {
+                $this->resp_message[] = $this->txtAction($this->C_USE, "done");
+            }
+        } else {
+            $this->resp_message[] = $this->txtAction($this->C_USE, "none");
+        }
+    }
+
+    private function cmdSpeak($item) {
+        if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_SPEA])) {
+            $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_SPEA];
+            $canDo = $this->callConditionOnEventAction($list_condiz);
+            if (!$canDo) {
+                $this->resp_message[] = $this->txtAction($this->C_SPEA, "none");
+            } else {
+                //$this->resp_message[] = $this->txtAction($this->C_SPEA, "done");
+            }
+        } else {
+            $this->resp_message[] = $this->txtAction($verb, "none");            
+        }
+    }
 
     private function countInventory() {
         $n_it = 0;
@@ -553,7 +540,7 @@ class Engine
     }
 
     private function cmdInventory() {
-        $txt = $this->txtAction($this->curr_verb, "got")."\n";
+        $txt = $this->txtAction($this->C_INVE, "got")."\n";
         $n_it = 0;
         foreach ($this->game[$this->T_ITEM] as $k => $v) {
             if ($v[$this->T_POSI] == $this->F_INVE) {
@@ -567,21 +554,20 @@ class Engine
         $this->resp_message[] = $txt;
     }
 
-    private function cmdLook() {
-        if ( $this->curr_item!="" ) {
-            if (isset($this->game[$this->T_ITEM][$this->curr_item])) {
-                if ($this->game[$this->T_ITEM][$this->curr_item][$this->T_POSI] == $this->player_pos ||
-                $this->game[$this->T_ITEM][$this->curr_item][$this->T_POSI] == $this->F_INVE ) {
-                    $this->resp_message[] = $this->game[$this->T_ITEM][$this->curr_item][$this->T_DETA];
-                } else {
-                    $this->resp_message[] = $this->txtAction($this->curr_verb, "none");
-                }
-            } elseif (isset($this->game[$this->T_ROOM][$this->curr_item])) {
-                if ($this->player_pos == $this->curr_item) {
-                    if (isset($this->game[$this->T_ROOM][$this->curr_item][$this->T_DETA])) {
-                        $this->resp_message[] = $this->game[$this->T_ROOM][$this->curr_item][$this->T_DETA];
-                    } else {
-                        $this->resp_message[] = $this->game[$this->T_ROOM][$this->curr_item][$this->T_DESC];
+    private function cmdLook($item) {
+        if ( $item != "" ) {
+            if (isset($this->game[$this->T_ITEM][$item])) { //exist item in game
+                if ($this->game[$this->T_ITEM][$item][$this->T_POSI] == $this->player_pos ||
+                $this->game[$this->T_ITEM][$item][$this->T_POSI] == $this->F_INVE ) { // and item is in current loc or in inventory
+                    if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_LOOK])) {
+                        $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_LOOK];
+                        $canDo = $this->callConditionOnEventAction($list_condiz);
+                        if (!$canDo) {
+                            $this->resp_message[] = $this->txtAction($this->C_LOOK, "none");
+                        } else {
+                            //DONE!
+                            //$this->resp_message[] = $this->txtAction($this->C_LOOK, "done");
+                        }
                     }
                 } else {
                     $this->resp_message[] = $this->txtAction($this->curr_verb, "none");
@@ -594,49 +580,24 @@ class Engine
         }
     }
         
-    private function cmdGoto() {
+    private function cmdGoto($dire) {
         $dire = $this->parser_dire[$this->curr_item];
-        if (isset($this->game[$this->T_ROOM][$this->player_pos][$this->T_EXIT])) {
-            $available = $this->game[$this->T_ROOM][$this->player_pos][$this->T_EXIT];
-            if (isset($available[$dire])) {
-                $this->player_pos = $available[$dire];
-                $this->trigger_action = "goto";
-                $this->trigger_item = $this->player_pos;
-            } else {
-                $this->resp_message[] = $this->txtAction($this->curr_verb, "notable");
-                $this->trigger_action = "goto_no";
-            }
+        $available = $this->game[$this->T_ROOM][$this->player_pos][$this->T_EXIT];
+        if (isset($available[$dire])) {
+            $this->player_pos = $available[$dire];
+            $this->trigger_action = "goto";
+            $this->trigger_item = $this->player_pos;
         } else {
             $this->resp_message[] = $this->txtAction($this->curr_verb, "notable");
-            $this->trigger_action = "goto_no";        
+            $this->trigger_action = "goto_no";
         }
-    }
-
-    private function cmdStatus() {
-        $this->resp_message[] = "STATUS: ".print_r($this->var,1);
     }
 
     /**
      * Engine Event
      */
 
-    private function callTrigger() 
-    {
-        if ($this->trigger_action != "") {
-            if (isset($this->game[$this->T_TRIG]["*"])) {
-                $list_event = $this->game[$this->T_TRIG]["*"];
-                $this->callCondEvent($list_event);
-            }
-            if (isset($this->game[$this->T_TRIG][$this->trigger_action])) {
-                $list_event = $this->game[$this->T_TRIG][$this->trigger_action];
-                $this->callCondEvent($list_event);
-            }
-            $this->trigger_action = "";
-            $this->trigger_item = "";
-        }
-    }
-
-    private function evalSingleCond($condiz) {
+    private function evaluateSingleCondition($condiz) {
         if (strpos($condiz, ">") !== false) {
             list($op1,$op2) = explode(">",$condiz);
             if (isset($this->var[$op1])) {
@@ -667,17 +628,25 @@ class Engine
             }
             return ($op1 == $op2) ? true : false;
         }
-        if (strpos($condiz, "@") !== false) {
-            $item = trim($condiz,"@");
-            if($this->game[$this->T_ITEM][$item][$this->T_POSI] == "@") {
+        if (strpos($condiz, "#") !== false) {// object in inventory
+            $item = trim($condiz,"#");
+            if($this->game[$this->T_ITEM][$item][$this->T_POSI] == "#") {
                 return true;
             } else {
                 return false;
             }
         }
-        if (strpos($condiz, "#") !== false) {
-            $loc = trim($condiz,"#");
+        if (strpos($condiz, "@") !== false) { // location of player
+            $loc = trim($condiz,"@");
             if($this->player_pos == $loc) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+        if (strpos($condiz, ":") !== false) { // verb
+            $verb = trim($condiz,":");
+            if($this->trigger_action == $verb) {
                 return true;
             } else {
                 return false;
@@ -686,53 +655,73 @@ class Engine
         return false;
     }        
 
-    private function evalCond($cond) {
-        list($tag,$condiz)=explode(":",trim($cond));
-        if (strtolower($tag)=="cond") {
-            if ($condiz!="") {
-                $list_condiz = explode("&",$condiz);
-                $resu=true;
-                foreach ($list_condiz as $curr_condiz) {
-                    $value = $this->evalSingleCond($curr_condiz);
-                    $resu &= $value;
-                }
-                return $resu;
-            } else {
-                return true;
+    private function evaluateAndCondition($condiz) {
+        if ($condiz!="") {
+            $list_condiz = explode("&",$condiz);
+            $resu=true;
+            foreach ($list_condiz as $curr_condiz) {
+                $value = $this->evaluateSingleCondition($curr_condiz);
+                $resu &= $value;
             }
+            return $resu;
         } else {
-            return false;
+            return true;
         }
     }
 
-    private function callCondEvent($cond_event_list) 
+    private function callConditionOnEventAction($cond_event_list) 
     {
         $result = true;
         foreach ($cond_event_list as $curr_cond => $event_list) {
-            $result_cond = $this->evalCond($curr_cond);
-            if ($result_cond && $this->end == 0) {
-                $this->callEvent($event_list);
+            if ($curr_cond=='*') {
+                if ($this->end == 0) {
+                    $this->callEvent($event_list);
+                    return true;
+                }
+            } else {
+                $result_cond = $this->evaluateAndCondition($curr_cond);
+                $result &= $result_cond;
+                if ($result_cond && $this->end == 0) {
+                    $this->callEvent($event_list);
+                    return $result;
+                }
             }
-            $result &= $result_cond;
         }
         return $result;
+    }
+
+    private function callTrigger() 
+    {
+        if ($this->trigger_action != "") {
+            if (isset($this->game[$this->T_TRIG])) {
+                $list_event = $this->game[$this->T_TRIG];
+                foreach ($list_event as $curr_cond => $event_list) {
+                    $result_cond = $this->evaluateAndCondition($curr_cond);
+                    if ($result_cond && $this->end == 0) {
+                        $this->callEvent($event_list);
+                    }
+                }
+            }
+            $this->trigger_action = "";
+            $this->trigger_item = "";
+        }
     }
 
     private function callEvent($event_list) 
     {
         foreach ($event_list as $ev_cmd => $ev_par) {
             switch ($ev_cmd) {
-                case "obj":
-                    $this->doEventObj($ev_par);
-                    break;
-                case "dir":
+                case "dir": // to check
                     $this->doEventDir($ev_par);
                     break;
-                case "add":
+                case "add": // to check
                     $this->doEventAdd($ev_par);
                     break;
-                case "rem":
+                case "rem": // to check
                     $this->doEventRem($ev_par);
+                    break;
+                case "obj":
+                    $this->doEventObj($ev_par);
                     break;
                 case "chg":
                     $this->doEventChg($ev_par);
@@ -758,12 +747,28 @@ class Engine
                 default:
             }
         }
-        //$this->log($this->game);
     }
 
-    private function doEventSay($par)
+    private function doEventDir($par)
     {
-        $this->arrStr2respMsg($par);   
+        $dir = explode(":",$par);
+        if (count($dir)>1) {
+            $room = $obj[0];
+            $mov = $obj[1];
+            $room2 = "";
+            if (isset($obj[2])) {
+                $room2 = $obj[2];
+            }
+            if (isset($this->game[$this->T_ROOM][$room])) {
+                if (isset($this->game[$this->T_EXIT][$mov])) {
+                    if (isset($this->game[$this->T_ROOM][$room2])) {
+                        $this->game[$this->T_ROOM][$room][$this->T_EXIT] = $room2;
+                    } else {
+                        unset($this->game[$this->T_ROOM][$room][$this->T_EXIT]);
+                    }
+                }
+            }
+        }
     }
 
     private function doEventAdd($par)
@@ -789,28 +794,6 @@ class Engine
                         }
                     } else {
                         $this->game[$this->T_ITEM][$item2add_name][$this->T_POSI] = $this->player_pos;
-                    }
-                }
-            }
-        }
-    }
-
-    private function doEventDir($par)
-    {
-        $dir = explode(":",$par);
-        if (count($dir)>1) {
-            $room = $obj[0];
-            $mov = $obj[1];
-            $room2 = "";
-            if (isset($obj[2])) {
-                $room2 = $obj[2];
-            }
-            if (isset($this->game[$this->T_ROOM][$room])) {
-                if (isset($this->game[$this->T_EXIT][$mov])) {
-                    if (isset($this->game[$this->T_ROOM][$room2])) {
-                        $this->game[$this->T_ROOM][$room][$this->T_EXIT] = $room2;
-                    } else {
-                        unset($this->game[$this->T_ROOM][$room][$this->T_EXIT]);
                     }
                 }
             }
@@ -844,9 +827,6 @@ class Engine
             if (isset($par[$this->T_DESC])) {
                 $this->game[$this->T_ITEM][$item2chg_name][$this->T_DESC] = $par[$this->T_DESC];
             }
-            if (isset($par[$this->T_DETA])) {
-                $this->game[$this->T_ITEM][$item2chg_name][$this->T_DETA] = $par[$this->T_DETA];
-            }
             if (isset($par[$this->T_POSI])) {
                 $this->game[$this->T_ITEM][$item2chg_name][$this->T_POSI] = $par[$this->T_POSI];
             }
@@ -855,24 +835,20 @@ class Engine
             }
         }
     }
-
-    private function doEventRem($par)
-    {
-    }
-
+    
     private function doEventVarSet($par)
     {
         if (is_array($par)) {
             foreach ($par as $curr_par) {
                 if (is_string($curr_par)) {
                     list($var_name, $var_value) = explode(":",$curr_par);
-                    $this->var[$var_name] = $var_value;
+                    $this->var[$var_name] = is_numeric($var_value) ? $var_value + 0 : $var_value;
                 }                    
             }
         } else {
             if (is_string($par)) {
                 list($var_name, $var_value) = explode(":",$par);
-                $this->var[$var_name] = $var_value;
+                $this->var[$var_name] = is_numeric($var_value) ? $var_value + 0 : $var_value;
             }
         }
     }
@@ -884,9 +860,9 @@ class Engine
                 if (is_string($curr_par)) {
                     list($var_name, $var_value) = explode(":",$curr_par);
                     if (isset($this->var[$var_name])) {
-                        $this->var[$var_name] += $var_value;
+                        $this->var[$var_name] += ($var_value + 0);
                     } else {
-                        $this->var[$var_name] = $var_value;
+                        $this->var[$var_name] = ($var_value + 0);
                     }
                 }                    
             }
@@ -894,9 +870,9 @@ class Engine
             if (is_string($par)) {
                 list($var_name, $var_value) = explode(":",$par);
                 if (isset($this->var[$var_name])) {
-                    $this->var[$var_name] += $var_value;
+                    $this->var[$var_name] += ($var_value + 0);
                 } else {
-                    $this->var[$var_name] = $var_value;
+                    $this->var[$var_name] = ($var_value + 0);
                 }
             }
         }
@@ -909,9 +885,9 @@ class Engine
                 if (is_string($curr_par)) {
                     list($var_name, $var_value) = explode(":",$curr_par);
                     if (isset($this->var[$var_name])) {
-                        $this->var[$var_name] -= $var_value;
+                        $this->var[$var_name] -= ($var_value + 0);
                     } else {
-                        $this->var[$var_name] = -$var_value;
+                        $this->var[$var_name] = -($var_value + 0);
                     }
                 }                    
             }
@@ -921,21 +897,30 @@ class Engine
                 if (isset($this->var[$var_name])) {
                     $this->var[$var_name] -= $var_value;
                 } else {
-                    $this->var[$var_name] = -$var_value;
+                    $this->var[$var_name] = -($var_value + 0);
                 }
             }
         }
     }
 
+    private function doEventSay($par)
+    {
+        $this->arrStr2respMsg($par);   
+    }
+
     private function doEventVictory($par)
     {
-        $this->arrStr2respMsg($this->game["config"]["victory"]);
+        if (isset($this->game[$this->T_CONF]["victory"])) {
+            $this->arrStr2respMsg($this->game[$this->T_CONF]["victory"]);
+        }
         $this->end = 1;
     }
 
     private function doEventDefeat($par)
     {
-        $this->arrStr2respMsg($this->game["config"]["defeat"]);
+        if (isset($this->game[$this->T_CONF]["defeat"])) {
+            $this->arrStr2respMsg($this->game[$this->T_CONF]["defeat"]);
+        }
         $this->end = 1;
     }
 
@@ -1001,18 +986,6 @@ class Engine
             }
         }
         return $dizio;
-    }
-
-    private function log($l) {
-        if ($this->debug) {
-            $f = "engine.log";
-            if (is_array($l)) {
-                $l = print_r($l,1);
-            }
-            $c ="[".date("Y-m-d H:i:s")."] ".$l."\n";
-            //Storage::append($f, $c);
-            //savetofile
-        }
     }
 
 }

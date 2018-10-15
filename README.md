@@ -1,6 +1,6 @@
 # Text Adventure Engine
 
-Text Adventure Engine based on json formatted file.
+A text adventure Engine based on json formatted file.
 
 ## License
 
