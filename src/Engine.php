@@ -4,23 +4,31 @@ namespace Erebox\TextAdventureEngine;
 
 class Engine
 {
-
-    protected $resp_message = [];
-    protected $resp_status = [];
-
-    protected $status = 0;
-    protected $end = 0;    
-    protected $player_pos = "";
-    protected $inventory_max = 10;
-
-    protected $inventory = [];
     protected $game = null;
-    protected $var = [];
+
+    //setup
+    protected $game_room = null;
+    protected $game_item = null;
+    protected $game_trigger = null;
+    protected $game_config = null;
 
     protected $parser_igno = [];
     protected $parser_verb = [];
     protected $parser_dire = [];
     protected $parser_item = [];
+
+    protected $end = 0;    
+    protected $player_pos = "";
+    protected $inventory_max = 10;
+
+    protected $inventory = [];
+    protected $var = [];
+
+    protected $resp_message = [];
+    protected $resp_status = [];
+
+
+
 
     protected $curr_verb = "";
     protected $curr_item = "";
@@ -29,14 +37,19 @@ class Engine
     protected $trigger_item = "";
 
     //Tag
-    protected $T_ROOM   = 'room'; //description "" direction {}
-    protected $T_ITEM   = 'item'; //description "" position "" action {} capacity bool
+    protected $T_ROOM   = 'room';
+    protected $T_ITEM   = 'item';
     protected $T_TRIG   = "trigger";
     protected $T_CONF   = "config";
+
     protected $T_ACTI   = "action";
+    protected $T_IGNO   = "ignore";
+    protected $T_DIRE   = "direction";
+
     protected $T_DESC   = "description";
-    protected $T_EXIT   = "direction";
+
     protected $T_POSI   = "position";
+
     protected $T_OPEN   = "openable";    //capacity
     protected $T_PICK   = "pickable";
     protected $T_REMO   = "removable";
@@ -74,7 +87,12 @@ class Engine
         if ($jsongame) {
             $this->game = json_decode($jsongame, true);
         }
-        if ($this->game && count($this->game)>0) {
+        $this->restart();
+    }
+
+    public function restart() 
+    {
+        if ($this->game && count($this->game) > 0) {
             $this->setup();
             $this->intro();
             $this->go();
@@ -113,37 +131,56 @@ class Engine
     
     private function setup()
     {
-        $this->player_pos = $this->game[$this->T_CONF]["init_room"];
-        if (isset($this->game[$this->T_CONF]["inventory_max"])) {
-            $this->inventory_max = $this->game[$this->T_CONF]["inventory_max"];            
+        $this->game_room = $this->game[$this->T_ROOM];
+        $this->game_item = $this->game[$this->T_ITEM];
+        $this->game_trig = $this->game[$this->T_TRIG];
+        $lang = "en";
+        if (isset($this->game["lang"])) {
+            $lang = $this->game["lang"];
+        }
+        $this->game_conf = (new DefaultConfig($lang))->get();
+
+        $current_config = $this->game[$this->T_CONF];
+        foreach ($current_config as $cfg_key => $cfg_val) {
+            $this->game_conf[$cfg_key] = $cfg_val;
+        }
+
+        $this->parser_igno = array_flip($this->game_conf["ignore"]);
+        $this->parser_dire = $this->getTokenArray($this->game_conf[$this->T_DIRE]);
+        $this->parser_verb = $this->getOnlyAlias($this->game_conf[$this->T_ACTI]);
+        $this->parser_item = $this->getTokenAlias($this->game_item);
+
+        $this->end = 0;
+        $this->player_pos = $this->game_conf["init"];
+        if (isset($this->game_conf["inventory_max"])) {
+            $this->inventory_max = $this->game_conf["inventory_max"];            
         }
         
-        $this->parser_igno = array_flip($this->game[$this->T_CONF]["ignore"]);
-        $this->parser_dire = $this->getTokenArray($this->game[$this->T_CONF][$this->T_EXIT]);
-        
-        $this->parser_verb = $this->getOnlyAlias($this->game[$this->T_ACTI]);
-        $this->parser_item = $this->getTokenAlias($this->game[$this->T_ITEM]);
-
-        if (isset($this->game["config"]["init_var"])) {
-            $var2set = $this->game["config"]["init_var"];
+        $this->inventory = [];
+        $this->var = [];
+        if (isset($this->game_conf["variable"])) {
+            $var2set = $this->game_conf["variable"];
             foreach ( $var2set as $curr_var => $curr_val) {
                 $this->var[$curr_var] = $curr_val;
             }
         }
+
+        $this->resp_message = [];
+        $this->resp_status = [];
     }
 
     private function intro()
     {
-        $this->arrStr2respMsg($this->game[$this->T_CONF]["intro"]);
+        $this->arrStr2respMsg($this->game_conf["intro"]);
     }
 
     private function go()
     {
         $this->callTrigger();
         if ($this->end == 0) {
-            $dove = $this->game[$this->T_ROOM][$this->player_pos];
+            $dove = $this->game_room[$this->player_pos];
             $txt = $this->txtAction("*", "where").$dove[$this->T_DESC].".\n";
-            foreach ($this->game[$this->T_ITEM] as  $k =>$v) {
+            foreach ($this->game_item as  $k =>$v) {
                 if ($v[$this->T_POSI] == $this->player_pos) {
                     $txt .= $this->txtAction("*", "see").$v[$this->T_DESC].".\n";
                 }
@@ -264,7 +301,7 @@ class Engine
 
 
     private function cmdHelp() {
-        $this->arrStr2respMsg($this->game[$this->T_CONF]["help"]);
+        $this->arrStr2respMsg($this->game_conf["help"]);
         $this->trigger_action = "";
         $this->trigger_item = "";
     }
@@ -280,13 +317,13 @@ class Engine
 
     private function canOpen($item) {
         if (
-            isset($this->game[$this->T_ITEM][$item]) && (
-                $this->game[$this->T_ITEM][$item][$this->T_POSI] == $this->player_pos ||
-            $this->game[$this->T_ITEM][$item][$this->T_POSI] == $this->F_INVE
+            isset($this->game_item[$item]) && (
+                $this->game_item[$item][$this->T_POSI] == $this->player_pos ||
+            $this->game_item[$item][$this->T_POSI] == $this->F_INVE
             )
         ) {
-            if (isset($this->game[$this->T_ITEM][$item][$this->T_OPEN])) {
-                $open = $this->game[$this->T_ITEM][$item][$this->T_OPEN];
+            if (isset($this->game_item[$item][$this->T_OPEN])) {
+                $open = $this->game_item[$item][$this->T_OPEN];
                 if ($open) {
                     return "already";
                 } else {
@@ -303,16 +340,16 @@ class Engine
     private function cmdOpen($item) {
         $can = $this->canOpen($item);
         if ($can == "ok") {
-            if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_OPEN])) {
-                $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_OPEN];
+            if (isset($this->game_item[$item][$this->T_ACTI][$this->C_OPEN])) {
+                $list_condiz = $this->game_item[$item][$this->T_ACTI][$this->C_OPEN];
                 $canDo = $this->callConditionOnEventAction($list_condiz);
                 if (!$canDo) {
                     $this->resp_message[] = $this->txtAction($this->C_OPEN, "notable");
                 } else {
-                    $this->game[$this->T_ITEM][$item][$this->T_OPEN] = true;
+                    $this->game_item[$item][$this->T_OPEN] = true;
                 }
             } else {
-                $this->game[$this->T_ITEM][$item][$this->T_OPEN] = true;
+                $this->game_item[$item][$this->T_OPEN] = true;
                 $this->resp_message[] = $this->txtAction($this->C_OPEN, "done");
             }    
         } else {
@@ -322,13 +359,13 @@ class Engine
 
     private function canClose($item) {
         if (
-            isset($this->game[$this->T_ITEM][$item]) && (
-            $this->game[$this->T_ITEM][$item][$this->T_POSI] == $this->player_pos ||
-            $this->game[$this->T_ITEM][$item][$this->T_POSI] == $this->F_INVE
+            isset($this->game_item[$item]) && (
+            $this->game_item[$item][$this->T_POSI] == $this->player_pos ||
+            $this->game_item[$item][$this->T_POSI] == $this->F_INVE
             )
         ) {
-            if (isset($this->game[$this->T_ITEM][$item][$this->T_OPEN])) {
-                $open = $this->game[$this->T_ITEM][$item][$this->T_OPEN];
+            if (isset($this->game_item[$item][$this->T_OPEN])) {
+                $open = $this->game_item[$item][$this->T_OPEN];
                 if ($open) {
                     return "ok";
                 } else {
@@ -345,16 +382,16 @@ class Engine
     private function cmdClose($item) {
         $can = $this->canClose($item);
         if ($can == "ok") {
-            if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_CLOS])) {
-                $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_CLOS];
+            if (isset($this->game_item[$item][$this->T_ACTI][$this->C_CLOS])) {
+                $list_condiz = $this->game_item[$item][$this->T_ACTI][$this->C_CLOS];
                 $canDo = $this->callConditionOnEventAction($list_condiz);
                 if (!$canDo) {
                     $this->resp_message[] = $this->txtAction($this->C_CLOS, "notable");
                 } else {
-                    $this->game[$this->T_ITEM][$item][$this->T_OPEN] = false;
+                    $this->game_item[$item][$this->T_OPEN] = false;
                 }
             } else {
-                $this->game[$this->T_ITEM][$item][$this->T_OPEN] = false;
+                $this->game_item[$item][$this->T_OPEN] = false;
                 $this->resp_message[] = $this->txtAction($this->C_CLOS, "done");
             }    
         } else {
@@ -363,8 +400,8 @@ class Engine
     }
 
     private function canPick($item) {
-        if ( isset($this->game[$this->T_ITEM][$item]) && $this->game[$this->T_ITEM][$item][$this->T_POSI] == $this->player_pos ) {
-            if (isset($this->game[$this->T_ITEM][$item][$this->T_PICK])) {
+        if ( isset($this->game_item[$item]) && $this->game_item[$item][$this->T_POSI] == $this->player_pos ) {
+            if (isset($this->game_item[$item][$this->T_PICK])) {
                 $num_obj_inv = $this->countInventory();
                 if ($num_obj_inv >= $this->inventory_max) {
                     return "fullinventory";
@@ -382,16 +419,16 @@ class Engine
     private function cmdPickup($item) {
         $can = $this->canPick($item);
         if ($can == "ok") {
-            if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_PICK])) {
-                $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_PICK];
+            if (isset($this->game_item[$item][$this->T_ACTI][$this->C_PICK])) {
+                $list_condiz = $this->game_item[$item][$this->T_ACTI][$this->C_PICK];
                 $canDo = $this->callConditionOnEventAction($list_condiz);
                 if (!$canDo) {
                     $this->resp_message[] = $this->txtAction($this->C_PICK, "notable");
                 } else {
-                    $this->game[$this->T_ITEM][$item][$this->T_POSI] = $this->F_INVE;
+                    $this->game_item[$item][$this->T_POSI] = $this->F_INVE;
                 }
             } else {
-                $this->game[$this->T_ITEM][$item][$this->T_POSI] = $this->F_INVE;
+                $this->game_item[$item][$this->T_POSI] = $this->F_INVE;
                 $this->resp_message[] = $this->txtAction($this->C_PICK, "done");
             }
         } else {
@@ -400,8 +437,8 @@ class Engine
     }
 
     private function canLeave($item) {
-        if ( isset($this->game[$this->T_ITEM][$item]) && $this->game[$this->T_ITEM][$item][$this->T_POSI] == $this->F_INVE ) { 
-            if ( isset($this->game[$this->T_ITEM][$item][$this->T_PICK]) ) {
+        if ( isset($this->game_item[$item]) && $this->game_item[$item][$this->T_POSI] == $this->F_INVE ) { 
+            if ( isset($this->game_item[$item][$this->T_PICK]) ) {
                 return "ok";
             } else {
                 return "notable";
@@ -414,16 +451,16 @@ class Engine
     private function cmdLeave($item) {
         $can = $this->canLeave($item);
         if ($can == "ok") {
-            if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_LEAV])) {
-                $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_LEAV];
+            if (isset($this->game_item[$item][$this->T_ACTI][$this->C_LEAV])) {
+                $list_condiz = $this->game_item[$item][$this->T_ACTI][$this->C_LEAV];
                 $canDo = $this->callConditionOnEventAction($list_condiz);
                 if (!$canDo) {
                     $this->resp_message[] = $this->txtAction($this->C_LEAV, "notable");
                 } else {
-                    $this->game[$this->T_ITEM][$item][$this->T_POSI] = $this->player_pos;
+                    $this->game_item[$item][$this->T_POSI] = $this->player_pos;
                 }
             } else {
-                $this->game[$this->T_ITEM][$item][$this->T_POSI] = $this->player_pos;
+                $this->game_item[$item][$this->T_POSI] = $this->player_pos;
                 $this->resp_message[] = $this->txtAction($this->C_LEAV, "done");
             }    
         } else {
@@ -433,10 +470,10 @@ class Engine
 
     private function canRemove($item) {
         if (
-            $this->game[$this->T_ITEM][$item][$this->T_POSI] == $this->player_pos ||
-            $this->game[$this->T_ITEM][$item][$this->T_POSI] == $this->F_INVE
+            $this->game_item[$item][$this->T_POSI] == $this->player_pos ||
+            $this->game_item[$item][$this->T_POSI] == $this->F_INVE
         ) {
-            if ( isset($this->game[$this->T_ITEM][$item][$this->T_REMO]) ) {
+            if ( isset($this->game_item[$item][$this->T_REMO]) ) {
                 return "ok";
             } else {
                 return "notable";
@@ -449,16 +486,16 @@ class Engine
     private function cmdRemove($item) {
         $can = $this->canRemove($item);
         if ($can == "ok") {
-            if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_REMO])) {
-                $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_REMO];
+            if (isset($this->game_item[$item][$this->T_ACTI][$this->C_REMO])) {
+                $list_condiz = $this->game_item[$item][$this->T_ACTI][$this->C_REMO];
                 $canDo = $this->callConditionOnEventAction($list_condiz);
                 if (!$canDo) {
                     $this->resp_message[] = $this->txtAction($this->C_REMO, "notable");
                 } else {
-                    $this->game[$this->T_ITEM][$item][$this->T_POSI] = $this->F_REMO;
+                    $this->game_item[$item][$this->T_POSI] = $this->F_REMO;
                 }
             } else {
-                $this->game[$this->T_ITEM][$item][$this->T_POSI] = $this->F_REMO;
+                $this->game_item[$item][$this->T_POSI] = $this->F_REMO;
                 $this->resp_message[] = $this->txtAction($this->C_REMO, "done");
             }    
         } else {
@@ -468,10 +505,10 @@ class Engine
 
     private function canEat($item) {
         if (
-            $this->game[$this->T_ITEM][$item][$this->T_POSI] == $this->player_pos ||
-            $this->game[$this->T_ITEM][$item][$this->T_POSI] == $this->F_INVE
+            $this->game_item[$item][$this->T_POSI] == $this->player_pos ||
+            $this->game_item[$item][$this->T_POSI] == $this->F_INVE
         ) {
-            if ( isset($this->game[$this->T_ITEM][$item][$this->T_EAT]) ) {
+            if ( isset($this->game_item[$item][$this->T_EAT]) ) {
                 return "ok";
             } else {
                 return "notable";
@@ -484,16 +521,16 @@ class Engine
     private function cmdEat($item) {
         $can = $this->canEat($item);
         if ($can == "ok") {
-            if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_EAT])) {
-                $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_EAT];
+            if (isset($this->game_item[$item][$this->T_ACTI][$this->C_EAT])) {
+                $list_condiz = $this->game_item[$item][$this->T_ACTI][$this->C_EAT];
                 $canDo = $this->callConditionOnEventAction($list_condiz);
                 if (!$canDo) {
                     $this->resp_message[] = $this->txtAction($this->C_EAT, "notable");
                 } else {
-                    $this->game[$this->T_ITEM][$item][$this->T_POSI] = $this->F_EAT;
+                    $this->game_item[$item][$this->T_POSI] = $this->F_EAT;
                 }
             } else {
-                $this->game[$this->T_ITEM][$item][$this->T_POSI] = $this->F_EAT;
+                $this->game_item[$item][$this->T_POSI] = $this->F_EAT;
                 $this->resp_message[] = $this->txtAction($this->C_EAT, "done");
             }    
         } else {
@@ -502,8 +539,8 @@ class Engine
     }
 
     private function cmdUse($item) {
-        if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_USE])) {
-            $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_USE];
+        if (isset($this->game_item[$item][$this->T_ACTI][$this->C_USE])) {
+            $list_condiz = $this->game_item[$item][$this->T_ACTI][$this->C_USE];
             $canDo = $this->callConditionOnEventAction($list_condiz);
             if (!$canDo) {
                 $this->resp_message[] = $this->txtAction($this->C_USE, "notable");
@@ -516,8 +553,8 @@ class Engine
     }
 
     private function cmdSpeak($item) {
-        if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_SPEA])) {
-            $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_SPEA];
+        if (isset($this->game_item[$item][$this->T_ACTI][$this->C_SPEA])) {
+            $list_condiz = $this->game_item[$item][$this->T_ACTI][$this->C_SPEA];
             $canDo = $this->callConditionOnEventAction($list_condiz);
             if (!$canDo) {
                 $this->resp_message[] = $this->txtAction($this->C_SPEA, "none");
@@ -531,7 +568,7 @@ class Engine
 
     private function countInventory() {
         $n_it = 0;
-        foreach ($this->game[$this->T_ITEM] as $k => $v) {
+        foreach ($this->game_item as $k => $v) {
             if ($v[$this->T_POSI] == $this->F_INVE) {
                 $n_it++;
             }
@@ -542,7 +579,7 @@ class Engine
     private function cmdInventory() {
         $txt = $this->txtAction($this->C_INVE, "got")."\n";
         $n_it = 0;
-        foreach ($this->game[$this->T_ITEM] as $k => $v) {
+        foreach ($this->game_item as $k => $v) {
             if ($v[$this->T_POSI] == $this->F_INVE) {
                 $txt .= "- ".$v[$this->T_DESC]."\n";
                 $n_it++;
@@ -556,11 +593,11 @@ class Engine
 
     private function cmdLook($item) {
         if ( $item != "" ) {
-            if (isset($this->game[$this->T_ITEM][$item])) { //exist item in game
-                if ($this->game[$this->T_ITEM][$item][$this->T_POSI] == $this->player_pos ||
-                $this->game[$this->T_ITEM][$item][$this->T_POSI] == $this->F_INVE ) { // and item is in current loc or in inventory
-                    if (isset($this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_LOOK])) {
-                        $list_condiz = $this->game[$this->T_ITEM][$item][$this->T_ACTI][$this->C_LOOK];
+            if (isset($this->game_item[$item])) { //exist item in game
+                if ($this->game_item[$item][$this->T_POSI] == $this->player_pos ||
+                $this->game_item[$item][$this->T_POSI] == $this->F_INVE ) { // and item is in current loc or in inventory
+                    if (isset($this->game_item[$item][$this->T_ACTI][$this->C_LOOK])) {
+                        $list_condiz = $this->game_item[$item][$this->T_ACTI][$this->C_LOOK];
                         $canDo = $this->callConditionOnEventAction($list_condiz);
                         if (!$canDo) {
                             $this->resp_message[] = $this->txtAction($this->C_LOOK, "none");
@@ -582,7 +619,7 @@ class Engine
         
     private function cmdGoto($dire) {
         $dire = $this->parser_dire[$this->curr_item];
-        $available = $this->game[$this->T_ROOM][$this->player_pos][$this->T_EXIT];
+        $available = $this->game_room[$this->player_pos][$this->T_DIRE];
         if (isset($available[$dire])) {
             $this->player_pos = $available[$dire];
             $this->trigger_action = "goto";
@@ -630,7 +667,7 @@ class Engine
         }
         if (strpos($condiz, "#") !== false) {// object in inventory
             $item = trim($condiz,"#");
-            if($this->game[$this->T_ITEM][$item][$this->T_POSI] == "#") {
+            if($this->game_item[$item][$this->T_POSI] == "#") {
                 return true;
             } else {
                 return false;
@@ -693,13 +730,10 @@ class Engine
     private function callTrigger() 
     {
         if ($this->trigger_action != "") {
-            if (isset($this->game[$this->T_TRIG])) {
-                $list_event = $this->game[$this->T_TRIG];
-                foreach ($list_event as $curr_cond => $event_list) {
-                    $result_cond = $this->evaluateAndCondition($curr_cond);
-                    if ($result_cond && $this->end == 0) {
-                        $this->callEvent($event_list);
-                    }
+            foreach ($this->game_trig as $curr_cond => $event_list) {
+                $result_cond = $this->evaluateAndCondition($curr_cond);
+                if ($result_cond && $this->end == 0) {
+                    $this->callEvent($event_list);
                 }
             }
             $this->trigger_action = "";
@@ -759,12 +793,12 @@ class Engine
             if (isset($obj[2])) {
                 $room2 = $obj[2];
             }
-            if (isset($this->game[$this->T_ROOM][$room])) {
-                if (isset($this->game[$this->T_EXIT][$mov])) {
-                    if (isset($this->game[$this->T_ROOM][$room2])) {
-                        $this->game[$this->T_ROOM][$room][$this->T_EXIT] = $room2;
+            if (isset($this->game_room[$room])) {
+                if (isset($this->game_room[$room][$this->T_DIRE][$mov])) { // TODO to check
+                    if (isset($this->game_room[$room2])) {
+                        $this->game_room[$room][$this->T_DIRE] = $room2;
                     } else {
-                        unset($this->game[$this->T_ROOM][$room][$this->T_EXIT]);
+                        unset($this->game_room[$room][$this->T_DIRE]);
                     }
                 }
             }
@@ -775,8 +809,8 @@ class Engine
     {
         if (isset($par[$this->T_ITEM])) {
             $item2add_name = $par[$this->T_ITEM];
-            if (isset($this->game[$this->T_ITEM][$item2add_name])) {
-                if ($this->game[$this->T_ITEM][$item2add_name][$this->T_POSI] == "") {
+            if (isset($this->game_item[$item2add_name])) {
+                if ($this->game_item[$item2add_name][$this->T_POSI] == "") {
                     // dove lo metto?
                     // @ inventario
                     // oggetto -> stessa posione oggetto (se non lo trovo posizione utente)
@@ -784,16 +818,16 @@ class Engine
                     if (isset($par[$this->T_POSI])) {
                         $pos = $par[$this->T_POSI];
                         if ($pos == $this->F_INVE) {
-                            $this->game[$this->T_ITEM][$item2add_name][$this->T_POSI] = $this->F_INVE;
+                            $this->game_item[$item2add_name][$this->T_POSI] = $this->F_INVE;
                         } else {
                             if (isset($this->parser_item[$pos])) {
-                                $this->game[$this->T_ITEM][$item2add_name][$this->T_POSI] = $this->game[$this->T_ITEM][$pos][$this->T_POSI];
+                                $this->game_item[$item2add_name][$this->T_POSI] = $this->game_item[$pos][$this->T_POSI];
                             } else {
-                                $this->game[$this->T_ITEM][$item2add_name][$this->T_POSI] = $this->player_pos;
+                                $this->game_item[$item2add_name][$this->T_POSI] = $this->player_pos;
                             }
                         }
                     } else {
-                        $this->game[$this->T_ITEM][$item2add_name][$this->T_POSI] = $this->player_pos;
+                        $this->game_item[$item2add_name][$this->T_POSI] = $this->player_pos;
                     }
                 }
             }
@@ -806,14 +840,14 @@ class Engine
         if (count($obj)>1) {
             $item = $obj[0];
             $position = $obj[1];
-            if (isset($this->game[$this->T_ITEM][$item])) {
-                if ($position == $this->F_INVE  || $position == $this->F_REMO || isset($this->game[$this->T_ROOM][$position])) {
-                    $this->game[$this->T_ITEM][$item][$this->T_POSI] = $position;
+            if (isset($this->game_item[$item])) {
+                if ($position == $this->F_INVE  || $position == $this->F_REMO || isset($this->game_room[$position])) {
+                    $this->game_item[$item][$this->T_POSI] = $position;
                 } else {
                     if (isset($this->parser_item[$position])) {
-                        $this->game[$this->T_ITEM][$item][$this->T_POSI] =  $this->game[$this->T_ITEM][$position][$this->T_POSI];
+                        $this->game_item[$item][$this->T_POSI] =  $this->game_item[$position][$this->T_POSI];
                     } else {
-                        $this->game[$this->T_ITEM][$item][$this->T_POSI] = $this->player_pos;
+                        $this->game_item[$item][$this->T_POSI] = $this->player_pos;
                     }                    
                 }
             }
@@ -825,13 +859,13 @@ class Engine
         if (isset($par[$this->T_ITEM])) {
             $item2chg_name = $par[$this->T_ITEM];
             if (isset($par[$this->T_DESC])) {
-                $this->game[$this->T_ITEM][$item2chg_name][$this->T_DESC] = $par[$this->T_DESC];
+                $this->game_item[$item2chg_name][$this->T_DESC] = $par[$this->T_DESC];
             }
             if (isset($par[$this->T_POSI])) {
-                $this->game[$this->T_ITEM][$item2chg_name][$this->T_POSI] = $par[$this->T_POSI];
+                $this->game_item[$item2chg_name][$this->T_POSI] = $par[$this->T_POSI];
             }
             if (isset($par[$this->T_OPEN])) {
-                $this->game[$this->T_ITEM][$item2chg_name][$this->T_OPEN] = $par[$this->T_OPEN];
+                $this->game_item[$item2chg_name][$this->T_OPEN] = $par[$this->T_OPEN];
             }
         }
     }
@@ -910,16 +944,16 @@ class Engine
 
     private function doEventVictory($par)
     {
-        if (isset($this->game[$this->T_CONF]["victory"])) {
-            $this->arrStr2respMsg($this->game[$this->T_CONF]["victory"]);
+        if (isset($this->game_conf["victory"])) {
+            $this->arrStr2respMsg($this->game_conf["victory"]);
         }
         $this->end = 1;
     }
 
     private function doEventDefeat($par)
     {
-        if (isset($this->game[$this->T_CONF]["defeat"])) {
-            $this->arrStr2respMsg($this->game[$this->T_CONF]["defeat"]);
+        if (isset($this->game_conf["defeat"])) {
+            $this->arrStr2respMsg($this->game_conf["defeat"]);
         }
         $this->end = 1;
     }
@@ -936,10 +970,10 @@ class Engine
 
     private function txtAction($verb, $msg) {
         $txt = "";
-        if (isset($this->game[$this->T_ACTI][$verb][$msg])) {
-            $txt = $this->game[$this->T_ACTI][$verb][$msg];
-        } else if (isset($this->game[$this->T_ACTI]["*"][$msg])) {
-            $txt = $this->game[$this->T_ACTI]["*"][$msg];
+        if (isset($this->game_conf[$this->T_ACTI][$verb][$msg])) {
+            $txt = $this->game_conf[$this->T_ACTI][$verb][$msg];
+        } else if (isset($this->game_conf[$this->T_ACTI]["*"][$msg])) {
+            $txt = $this->game_conf[$this->T_ACTI]["*"][$msg];
         } else {
             $txt = "***MSG.".$verb.".".$msg;
         }
