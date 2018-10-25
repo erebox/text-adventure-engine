@@ -1,0 +1,37 @@
+{
+	"room": {
+		"camera": {
+            "description": "in una camera vuota",
+			"direction": {
+			}
+		}
+	},
+	"item": {
+		"letto": {
+			"position": "camera",
+			"description": "un letto",
+			"action": {
+				"look": {
+					"*": {
+						"say": ["un comodo letto con vecchie lenzuola di lino ed una coperta sgualcita."]
+					}
+				}
+			}
+		}
+	},
+	"trigger": {
+		":goto": {
+			"inc": "varMovimenti:1"
+		}
+	},
+	"lang": "it",
+	"config": {
+		"init": "camera",
+		"variable": {
+			"varWait":0
+		},
+		"intro": [
+			"*** Test - (C) Erebox 2017\n"
+		]
+	}
+}

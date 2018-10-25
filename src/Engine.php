@@ -9,8 +9,8 @@ class Engine
     //setup
     protected $game_room = null;
     protected $game_item = null;
-    protected $game_trigger = null;
-    protected $game_config = null;
+    protected $game_trig = null;
+    protected $game_conf = null;
 
     protected $parser_igno = [];
     protected $parser_verb = [];
@@ -125,27 +125,36 @@ class Engine
         return $this->V_VERS;
     }
 
+    public function debug($w = null) 
+    {
+        $r = $this->game;
+        //$r["config"] = $this->game_conf;
+        return json_encode($r, JSON_PRETTY_PRINT);
+    }
+
     /**
      *  Private
      */
     
     private function setup()
     {
-        $this->game_room = $this->game[$this->T_ROOM];
-        $this->game_item = $this->game[$this->T_ITEM];
-        $this->game_trig = $this->game[$this->T_TRIG];
+        // manage main elements: room item trigger config
+        $this->game_room = (isset($this->game[$this->T_ROOM])) ? $this->game[$this->T_ROOM] : [];
+        $this->game_item = (isset($this->game[$this->T_ITEM])) ? $this->game[$this->T_ITEM] : [];
+        $this->game_trig = (isset($this->game[$this->T_TRIG])) ? $this->game[$this->T_TRIG] : [];
         $lang = "en";
         if (isset($this->game["lang"])) {
             $lang = $this->game["lang"];
         }
         $this->game_conf = (new DefaultConfig($lang))->get();
-
-        $current_config = $this->game[$this->T_CONF];
+        $current_config = (isset($this->game[$this->T_CONF])) ? $this->game[$this->T_CONF] : [];
         foreach ($current_config as $cfg_key => $cfg_val) {
             $this->game_conf[$cfg_key] = $cfg_val;
         }
 
-        $this->parser_igno = array_flip($this->game_conf["ignore"]);
+        if (isset($this->game_conf["ignore"])) {
+            $this->parser_igno = array_flip($this->game_conf["ignore"]);
+        }
         $this->parser_dire = $this->getTokenArray($this->game_conf[$this->T_DIRE]);
         $this->parser_verb = $this->getOnlyAlias($this->game_conf[$this->T_ACTI]);
         $this->parser_item = $this->getTokenAlias($this->game_item);
@@ -986,11 +995,13 @@ class Engine
 
     private function getOnlyAlias($a) {
         $dizio = [];
-        foreach ($a as $k =>$v) {
-            if (isset($v["alias"])) {
-                $alias = $v["alias"];
-                foreach ($alias as $ali) {
-                    $dizio[$ali] = $k;
+        if (count($a)>0) {
+            foreach ($a as $k =>$v) {
+                if (isset($v["alias"])) {
+                    $alias = $v["alias"];
+                    foreach ($alias as $ali) {
+                        $dizio[$ali] = $k;
+                    }
                 }
             }
         }
@@ -999,12 +1010,14 @@ class Engine
 
     private function getTokenAlias($a) {
         $dizio = [];
-        foreach ($a as $k =>$v) {
-            $dizio[$k] = $k;
-            if (isset($v["alias"])) {
-                $alias = $v["alias"];
-                foreach ($alias as $ali) {
-                    $dizio[$ali] = $k;
+        if (count($a)>0) {
+            foreach ($a as $k =>$v) {
+                $dizio[$k] = $k;
+                if (isset($v["alias"])) {
+                    $alias = $v["alias"];
+                    foreach ($alias as $ali) {
+                        $dizio[$ali] = $k;
+                    }
                 }
             }
         }
@@ -1013,10 +1026,12 @@ class Engine
 
     private function getTokenArray($a) {
         $dizio = [];
-        foreach ($a as $k =>$v) {
-            $dizio[$k] = $k;
-            foreach ($v as $b) {
-                $dizio[$b] = $k;
+        if (count($a)>0) {
+            foreach ($a as $k =>$v) {
+                $dizio[$k] = $k;
+                foreach ($v as $b) {
+                    $dizio[$b] = $k;
+                }
             }
         }
         return $dizio;

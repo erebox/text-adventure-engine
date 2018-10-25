@@ -1,0 +1,22 @@
+{
+	"room": {
+		"camera": {
+            "description": "in una camera vuota",
+			"direction": {
+			}
+		}
+	},
+	"item": {
+		"letto": {
+			"position": "camera",
+			"description": "un letto",
+			"action": {
+				"look": {
+					"*": {
+						"say": ["un comodo letto."]
+					}
+				}
+			}
+		}
+	}
+}
