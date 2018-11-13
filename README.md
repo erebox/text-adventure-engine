@@ -1,6 +1,11 @@
 # Text Adventure Engine
 
-A text adventure Engine based on json formatted file.
+[![Source Code][badge-source]][source]
+[![Latest Version][badge-release]][release]
+[![Software License][badge-license]][license]
+[![Total Downloads][badge-downloads]][downloads]
+
+Erebox\TextAdventureEngine is a text adventure Engine based on json formatted file.
 
 ## License
 

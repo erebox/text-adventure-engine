@@ -13,11 +13,17 @@
         "un pulsante pu\u00F2 essere premuto (premi il pulsante), ",
         "un mobile pu\u00F2 essere spostato (sposta il mobile) o ",
         "una porta pu\u00F2 essere aperta o chiusa (apri la porta/chiudi la porta). \n"
-    ],		
-    "ignore": [
-        "a", "agli", "al", "all", "alla", "alle", "allo", "col", "con", "gli",
-        "i", "il", "l", "la", "le", "lo", "un", "una", "uno"
     ],
+    "parser": {
+        "function": {
+            "remove": "'"
+        }, 
+        "ignore": [
+            "a", "agli", "al", "all", "alla", "alle", "allo", "col", "con", "gli",
+            "i", "il", "l", "la", "le", "lo", "un", "una", "uno",
+            "di", "del", "dell", "da", "dal", "dall"
+        ]
+    },	
     "direction": {
         "n": [ "nord" ],
         "s": [ "sud" ],

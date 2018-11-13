@@ -3,8 +3,13 @@
     "intro": [ "WELCOME" ],
     "victory": [ "END" ],
     "defeat": [ "END" ],
-    "help": [ "HELP" ],		
-    "ignore": [ "with", "to", "for", "the", "a", "an" ],
+    "help": [ "HELP" ],
+    "parser": {
+        "function": {
+            "remove": "'"
+        }, 
+        "ignore": [ "with", "to", "for", "the", "a", "an" ]
+    },		
     "direction": {
         "n": [ "north" ],
         "s": [ "south" ],

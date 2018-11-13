@@ -13,6 +13,8 @@ class Engine
     protected $game_conf = null;
 
     protected $parser_igno = [];
+    protected $parser_func = [];
+
     protected $parser_verb = [];
     protected $parser_dire = [];
     protected $parser_item = [];
@@ -26,8 +28,6 @@ class Engine
 
     protected $resp_message = [];
     protected $resp_status = [];
-
-
 
 
     protected $curr_verb = "";
@@ -127,8 +127,12 @@ class Engine
 
     public function debug($w = null) 
     {
-        $r = $this->game;
-        //$r["config"] = $this->game_conf;
+        $r = [
+            "igno" => $this->parser_igno,
+            "dire" => $this->parser_dire,
+            "verb" => $this->parser_verb,
+            "item" => $this->parser_item,
+        ];        
         return json_encode($r, JSON_PRETTY_PRINT);
     }
 
@@ -152,11 +156,19 @@ class Engine
             $this->game_conf[$cfg_key] = $cfg_val;
         }
 
-        if (isset($this->game_conf["ignore"])) {
-            $this->parser_igno = array_flip($this->game_conf["ignore"]);
+        if (isset($this->game_conf["parser"])) {
+            //echo print_r($this->game_conf["parser"],1);
+            if (isset($this->game_conf["parser"]["ignore"])) 
+                $this->parser_igno = array_flip($this->game_conf["parser"]["ignore"]);
+            if (isset($this->game_conf["parser"]["function"])) 
+                $this->parser_func = $this->game_conf["parser"]["function"];
         }
         $this->parser_dire = $this->getTokenArray($this->game_conf[$this->T_DIRE]);
         $this->parser_verb = $this->getOnlyAlias($this->game_conf[$this->T_ACTI]);
+        $curr_parser_verb = $this->parser_dire;
+        foreach ($curr_parser_verb as $dire_ext => $dire_tag) {
+            $this->parser_verb[$dire_ext] = "goto";
+        }
         $this->parser_item = $this->getTokenAlias($this->game_item);
 
         $this->end = 0;
@@ -201,110 +213,106 @@ class Engine
         }
     }    
 
+    private function parseString($s) {
+        //apply function on string
+        $list_func =$this->parser_func;
+        foreach ($list_func as $func => $para) {
+            switch ($func) {
+                case "remove":
+                    $s = strtr($s, $para, " ");
+                    break;
+                case "replace":
+                    break;
+            }
+        }
+        //tokenize string with space as separator
+        $list = explode(" ", $s);
+        $verb = array_shift($list);
+        $risu=[];
+        foreach ($list as $word) {
+            if (!isset($this->parser_igno[$word])) {
+                $risu[] = $word;
+            }
+        }
+        array_unshift($risu, $verb);
+        return $risu;
+    }
+
+
     private function parseSentence($text)
     {
-        $t1 = preg_replace('/\s+/', ' ',$text);
-        if (strlen($t1)>0) {
-            $t2 = explode(" ",$t1);
-            if (count($t2)>0) {
-                $verb = "";
-                $item = "";
-                $t3 = [];
-                if (count($t2)>1) {
-                    foreach ($t2 as $tcurr) {
-                        if (!isset($this->parser_igno[$tcurr])) {
-                            $t3[] = $tcurr;
-                        }
-                    }    
-                } else {
-                    $t3 = $t2;
-                }
-                $verb = $t3[0];
-                if (!isset($this->parser_verb[$verb]) && !isset($this->parser_dire[$verb])) {
-                    $this->resp_message[] = $this->txtAction("*", "parser_noverb")." '".$verb."'.";
-                    $this->go();
-                    return;
-                }
-                if (isset($t3[1])) {
-                    $item = $t3[1];
-                    if (!isset($this->parser_item[$item]) && !isset($this->parser_dire[$item])) {
-                        $this->resp_message[] = $this->txtAction("*", "parser_noitem")." '".$item."'.";
-                        $this->go();                            
-                        return;
-                    }
-                }
-                $this->command($verb, $item);
-                $this->go();
-            }
-        } else {
-            $this->resp_message[] = $this->txtAction("*", "parser_say");
-            $this->go();
-        }
-        //return $this->end();
+        $words = $this->parseString($text);
+        $this->command($words);
+        $this->go();
     }
 
     /**
      * Engine Command
      */
 
-    private function command($verb, $item) {
-        $this->curr_verb = "";
-        $this->curr_item = "";
-        if (isset($this->parser_verb[$verb])) {
-            $this->curr_verb = $this->parser_verb[$verb];
-            $this->curr_item = $item;
-            $this->trigger_action = $this->curr_verb;
-            $this->trigger_item = $this->curr_item;
-            
-            switch ($this->curr_verb) {
-                case $this->C_OPEN: //ok
-                    $this->cmdOpen($item);
-                    break;
-                case $this->C_CLOS: //ok
-                    $this->cmdClose($item);
-                    break;
-                case $this->C_PICK: //ok
-                    $this->cmdPickup($item);
-                    break;
-                case $this->C_LEAV: //ok
-                    $this->cmdLeave($item);
-                    break;
-                case $this->C_EAT: //ok
-                    $this->cmdEat($item);
-                    break;
-                case $this->C_REMO: //ok
-                    $this->cmdRemove($item);
-                    break;
-                case $this->C_USE: //ok
-                    $this->cmdUse($item);
-                    break;
-                case $this->C_SPEA: //ok
-                    $this->cmdSpeak($item);
-                    break;
-                case $this->C_INVE: //ok
-                    $this->cmdInventory();
-                    break;
-                case $this->C_LOOK: //ok
-                    $this->cmdLook($item);
-                    break;
-                case $this->C_GOTO:
-                    $this->cmdGoto($item);
-                    break;
+    private function command($words) {
+        if (count($words) == 0) {
+            $this->resp_message[] = $this->txtAction("*", "parser_say");
+        } else {
+            $verb = $words[0];
+            $item1 = isset($words[1]) ? $words[1] : ""; 
+            $item2 = isset($words[2]) ? $words[2] : ""; 
+            if (isset($this->parser_verb[$verb])) {
+                $this->curr_verb = $this->parser_verb[$verb];
+                $this->curr_item = $item1;
+                $this->trigger_action = $this->curr_verb;
+                $this->trigger_item = $this->curr_item;
 
-                case $this->C_HELP: //ok
-                    $this->cmdHelp();
-                    break;
-                case $this->C_EXIT: //ok
-                    $this->cmdExit();
-                    break;
-                default:
-                    return $this->cmdDefault();
+                switch ($this->curr_verb) {
+                    case $this->C_OPEN: //ok
+                        $this->cmdOpen($item1);
+                        break;
+                    case $this->C_CLOS: //ok
+                        $this->cmdClose($item1);
+                        break;
+                    case $this->C_PICK: //ok
+                        $this->cmdPickup($item1);
+                        break;
+                    case $this->C_LEAV: //ok
+                        $this->cmdLeave($item1);
+                        break;
+                    case $this->C_EAT: //ok
+                        $this->cmdEat($item1);
+                        break;
+                    case $this->C_REMO: //ok
+                        $this->cmdRemove($item1);
+                        break;
+                    case $this->C_USE: //ok
+                        $this->cmdUse($item1);
+                        break;
+                    case $this->C_SPEA: //ok
+                        $this->cmdSpeak($item1);
+                        break;
+                    case $this->C_INVE: //ok
+                        $this->cmdInventory();
+                        break;
+                    case $this->C_LOOK: //ok
+                        $this->cmdLook($item1);
+                        break;
+                    case $this->C_GOTO:
+                        if ($item1!="") {
+                            $this->cmdGoto($item1);
+                        } else {
+                            $this->curr_item = $verb;
+                            $this->curr_verb = $this->C_GOTO;
+                            $this->cmdGoto($verb);        
+                        }
+                        break;    
+                    case $this->C_HELP: //ok
+                        $this->cmdHelp();
+                        break;
+                    case $this->C_EXIT: //ok
+                        $this->cmdExit();
+                        break;
+                    default:
+                        $this->resp_message[] = $this->txtAction("*", "parser_noverb")." '".$verb."'.";
+                }
             }
-        }
-        if (isset($this->parser_dire[$verb])) {
-            $this->curr_item = $verb;
-            $this->curr_verb = $this->C_GOTO;
-            $this->cmdGoto($verb);
         }
     }
 
@@ -318,10 +326,6 @@ class Engine
     private function cmdExit() {
         $this->resp_message[] = $this->txtAction($this->curr_verb, "done");
         $this->end = 1;
-    }
-
-    private function cmdDefault() {
-        $this->resp_message[] = $this->txtAction("*", "wip");
     }
 
     private function canOpen($item) {
@@ -971,13 +975,15 @@ class Engine
      * Utility Engine
      */
 
-    private function arrStr2respMsg($a) {
+    private function arrStr2respMsg($a) 
+    {
         if (isset($a)) {
             $this->resp_message[] = is_array($a) ? implode("",$a) : $a;
         }
     }        
 
-    private function txtAction($verb, $msg) {
+    private function txtAction($verb, $msg) 
+    {
         $txt = "";
         if (isset($this->game_conf[$this->T_ACTI][$verb][$msg])) {
             $txt = $this->game_conf[$this->T_ACTI][$verb][$msg];
@@ -993,7 +999,8 @@ class Engine
      * Utility Method
      */
 
-    private function getOnlyAlias($a) {
+    private function getOnlyAlias($a) 
+    {
         $dizio = [];
         if (count($a)>0) {
             foreach ($a as $k =>$v) {
@@ -1008,7 +1015,8 @@ class Engine
         return $dizio;
     }
 
-    private function getTokenAlias($a) {
+    private function getTokenAlias($a) 
+    {
         $dizio = [];
         if (count($a)>0) {
             foreach ($a as $k =>$v) {
@@ -1024,7 +1032,8 @@ class Engine
         return $dizio;
     }
 
-    private function getTokenArray($a) {
+    private function getTokenArray($a) 
+    {
         $dizio = [];
         if (count($a)>0) {
             foreach ($a as $k =>$v) {
