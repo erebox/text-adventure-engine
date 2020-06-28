@@ -631,7 +631,6 @@ class Engine
     }
         
     private function cmdGoto($dire) {
-        $dire = $this->parser_dire[$this->curr_item];
         $available = $this->game_room[$this->player_pos][$this->T_DIRE];
         if (isset($available[$dire])) {
             $this->player_pos = $available[$dire];
@@ -800,8 +799,8 @@ class Engine
     {
         $dir = explode(":",$par);
         if (count($dir)>1) {
-            $room = $obj[0];
-            $mov = $obj[1];
+            $room = $dir[0];
+            $mov = $dir[1];
             $room2 = "";
             if (isset($obj[2])) {
                 $room2 = $obj[2];
