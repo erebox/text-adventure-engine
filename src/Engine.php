@@ -802,8 +802,8 @@ class Engine
             $room = $dir[0];
             $mov = $dir[1];
             $room2 = "";
-            if (isset($obj[2])) {
-                $room2 = $obj[2];
+            if (isset($dir[2])) {
+                $room2 = $dir[2];
             }
             if (isset($this->game_room[$room])) {
                 if (isset($this->game_room[$room][$this->T_DIRE][$mov])) { // TODO to check
